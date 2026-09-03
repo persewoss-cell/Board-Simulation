@@ -59,7 +59,7 @@
     state.board = { wCm: w, hCm: h, scale: 1, pxW: 0, pxH: 0 };
     state.placedItems = [];
     el.board.classList.remove("board-empty");
-    el.boardHint.textContent = "환경판이 생성되었습니다. 아래에서 작품을 만들거나 액자 사이즈를 골라 드래그로 배치해보세요.";
+    el.boardHint.hidden = true;
     setPanelEnabled(el.customPanel, true);
     setPanelEnabled(el.presetPanel, true);
     el.clearBoardBtn.disabled = false;
@@ -121,13 +121,6 @@
   function renderCustomGallery() {
     el.customGallery.innerHTML = "";
     if (!state.board) return;
-    if (state.customTemplates.length === 0) {
-      var hint = document.createElement("p");
-      hint.className = "gallery-empty-hint";
-      hint.textContent = "아직 생성된 작품이 없습니다. 위에서 가로/세로 크기를 입력하고 생성해보세요.";
-      el.customGallery.appendChild(hint);
-      return;
-    }
     state.customTemplates.forEach(function (tpl) {
       el.customGallery.appendChild(buildTemplateCardEl(tpl, true));
     });
@@ -318,7 +311,7 @@
     ghost.style.height = ghostH + "px";
     ghost.style.background = tpl.color;
     ghost.textContent = tpl.label;
-    ghost.hidden = false;
+    ghost.style.display = "flex";
     positionGhost(e.clientX, e.clientY, ghostW, ghostH);
 
     function onMove(ev) {
@@ -328,7 +321,7 @@
     function onUp(ev) {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      ghost.hidden = true;
+      ghost.style.display = "none";
 
       if (!state.board) return;
       var boardRect = el.board.getBoundingClientRect();
