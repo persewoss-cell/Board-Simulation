@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>학교 복도 환경 시뮬레이션</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="app-header">
+    <h1>학교 복도 환경 시뮬레이션</h1>
+    <p class="subtitle">복도 환경판 크기를 입력하고, 원하는 크기의 작품을 배치해보세요.</p>
+  </header>
+
+  <section class="panel">
+    <h2>1. 환경판 크기 설정</h2>
+    <div class="input-row">
+      <label>가로
+        <input type="number" id="boardWidthInput" min="1" step="0.1" placeholder="cm">
+        <span class="unit">cm</span>
+      </label>
+      <label>세로
+        <input type="number" id="boardHeightInput" min="1" step="0.1" placeholder="cm">
+        <span class="unit">cm</span>
+      </label>
+      <button id="applyBoardBtn" type="button">환경판 생성</button>
+    </div>
+    <p class="hint" id="boardHint">환경판의 가로/세로 크기(cm)를 입력하고 &lsquo;환경판 생성&rsquo;을 눌러주세요.</p>
+  </section>
+
+  <section class="panel board-panel">
+    <h2>2. 환경판</h2>
+    <div class="board-wrapper" id="boardWrapper">
+      <div class="board board-empty" id="board">
+        <p class="board-placeholder" id="boardPlaceholder">환경판이 아직 생성되지 않았습니다.</p>
+      </div>
+    </div>
+    <div class="board-toolbar">
+      <span class="board-info" id="boardInfo"></span>
+      <button id="clearBoardBtn" type="button" disabled>배치된 작품 모두 지우기</button>
+    </div>
+  </section>
+
+  <section class="panel disabled-panel" id="customPanel">
+    <h2>3. 임의 환경작품 생성하기</h2>
+    <div class="input-row">
+      <label>가로
+        <input type="number" id="customWidthInput" min="1" step="0.1" placeholder="cm" disabled>
+        <span class="unit">cm</span>
+      </label>
+      <label>세로
+        <input type="number" id="customHeightInput" min="1" step="0.1" placeholder="cm" disabled>
+        <span class="unit">cm</span>
+      </label>
+      <button id="addCustomBtn" type="button" disabled>생성</button>
+    </div>
+    <p class="hint">생성된 작품을 드래그해서 환경판 위로 가져다 놓으세요. (드래그 시 자동 복제됩니다)</p>
+    <div class="gallery" id="customGallery"></div>
+  </section>
+
+  <section class="panel disabled-panel" id="presetPanel">
+    <h2>4. 액자 사이즈 갤러리</h2>
+    <p class="hint">아래 사각형을 드래그해서 환경판 위로 가져다 놓으세요. (드래그 시 자동 복제됩니다)</p>
+    <div class="gallery" id="presetGallery"></div>
+  </section>
+</div>
+
+<div class="drag-ghost" id="dragGhost" hidden></div>
+
+<script src="script.js"></script>
+</body>
+</html>
