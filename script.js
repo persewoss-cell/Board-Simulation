@@ -4,9 +4,9 @@
   var IN_TO_CM = 2.54;
 
   var PRESETS = [
-    { key: "4x6", label: "4×6inch", wCm: round1(4 * IN_TO_CM), hCm: round1(6 * IN_TO_CM), color: "#e2725b", url: "https://galleryunsu.co.kr/product/list.html?cate_no=70" },
-    { key: "5x7", label: "5×7inch", wCm: round1(5 * IN_TO_CM), hCm: round1(7 * IN_TO_CM), color: "#4f9d69", url: "https://galleryunsu.co.kr/product/list.html?cate_no=71" },
-    { key: "a5", label: "A5 (6×8inch)", wCm: round1(6 * IN_TO_CM), hCm: round1(8 * IN_TO_CM), color: "#4a7fbf", url: "https://galleryunsu.co.kr/product/list.html?cate_no=72" },
+    { key: "4x6", label: "4×6", wCm: round1(4 * IN_TO_CM), hCm: round1(6 * IN_TO_CM), color: "#e2725b", url: "https://galleryunsu.co.kr/product/list.html?cate_no=70" },
+    { key: "5x7", label: "5×7", wCm: round1(5 * IN_TO_CM), hCm: round1(7 * IN_TO_CM), color: "#4f9d69", url: "https://galleryunsu.co.kr/product/list.html?cate_no=71" },
+    { key: "a5", label: "A5", wCm: round1(6 * IN_TO_CM), hCm: round1(8 * IN_TO_CM), color: "#4a7fbf", url: "https://galleryunsu.co.kr/product/list.html?cate_no=72" },
     { key: "a4", label: "A4", wCm: 21.0, hCm: 29.7, color: "#c98a3e", url: "https://galleryunsu.co.kr/product/list.html?cate_no=73" },
     { key: "a3", label: "A3", wCm: 29.7, hCm: 42.0, color: "#8a5cb5", url: "https://galleryunsu.co.kr/product/list.html?cate_no=74" },
     { key: "8jeol", label: "8절", wCm: 27.3, hCm: 39.4, color: "#d1487a", url: "https://galleryunsu.co.kr/product/list.html?cate_no=94" }
@@ -21,10 +21,11 @@
   var state = {
     board: null, // { wCm, hCm, scale, pxW, pxH }
     presetTemplates: PRESETS.map(function (p, i) {
-      return { id: "preset-" + i, key: p.key, label: p.label, baseWCm: p.wCm, baseHCm: p.hCm, wCm: p.wCm, hCm: p.hCm, color: p.color, url: p.url, rotated: false };
+      return { id: "preset-" + i, key: p.key, isPreset: true, label: p.label, baseWCm: p.wCm, baseHCm: p.hCm, wCm: p.wCm, hCm: p.hCm, color: p.color, url: p.url, rotated: false };
     }),
     customTemplates: [],
-    placedItems: []
+    placedItems: [],
+    addCascade: 0
   };
 
   var el = {
@@ -115,14 +116,27 @@
       el.board.appendChild(buildPlacedItemEl(item));
     });
 
-    el.boardInfo.textContent = "환경판 크기: " + b.wCm + " × " + b.hCm + " cm  |  배치된 작품: " + state.placedItems.length + "개";
+    el.boardInfo.textContent = buildBoardInfoText(b);
+  }
+
+  function buildBoardInfoText(b) {
+    var counts = {};
+    PRESETS.forEach(function (p) { counts[p.key] = 0; });
+    counts.custom = 0;
+    state.placedItems.forEach(function (item) {
+      if (item.presetKey && counts.hasOwnProperty(item.presetKey)) counts[item.presetKey]++;
+      else counts.custom++;
+    });
+    var parts = PRESETS.map(function (p) { return p.label + ": " + counts[p.key] + "개"; });
+    parts.push("커스텀: " + counts.custom + "개");
+    return "환경판 크기: " + b.wCm + " × " + b.hCm + " cm  |  배치된 작품: " + state.placedItems.length + "개 [" + parts.join(" / ") + "]";
   }
 
   function renderCustomGallery() {
     el.customGallery.innerHTML = "";
     if (!state.board) return;
     state.customTemplates.forEach(function (tpl) {
-      el.customGallery.appendChild(buildTemplateCardEl(tpl, true));
+      el.customGallery.appendChild(buildTemplateItemEl(tpl, { removable: true, addButton: false }));
     });
   }
 
@@ -130,13 +144,64 @@
     el.presetGallery.innerHTML = "";
     if (!state.board) return;
     state.presetTemplates.forEach(function (tpl) {
-      el.presetGallery.appendChild(buildTemplateCardEl(tpl, false));
+      el.presetGallery.appendChild(buildTemplateItemEl(tpl, { removable: false, addButton: true }));
     });
   }
 
   function sizePx(tpl) {
     var scale = state.board.scale;
     return { w: Math.max(tpl.wCm * scale, 4), h: Math.max(tpl.hCm * scale, 4) };
+  }
+
+  function pickFontSizePx(pxW, pxH, lines) {
+    var base = Math.min(pxW, pxH);
+    var size = lines > 1 ? base * 0.17 : base * 0.32;
+    return clamp(size, 7, 13);
+  }
+
+  function buildTemplateItemEl(tpl, opts) {
+    var wrapper = document.createElement("div");
+    wrapper.className = "template-item";
+    wrapper.appendChild(buildTemplateCardEl(tpl, opts.removable));
+
+    if (opts.addButton) {
+      var addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "add-btn";
+      addBtn.textContent = "추가";
+      addBtn.title = "환경판 우측 상단에 추가";
+      addBtn.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+      addBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        addTemplateToBoard(tpl);
+      });
+      wrapper.appendChild(addBtn);
+    }
+
+    return wrapper;
+  }
+
+  function addTemplateToBoard(tpl) {
+    if (!state.board) return;
+    var b = state.board;
+    var wCm = tpl.wCm, hCm = tpl.hCm;
+    var offset = (state.addCascade % 6) * 2.5;
+    state.addCascade++;
+    var xCm = clamp(b.wCm - wCm - offset, 0, Math.max(b.wCm - wCm, 0));
+    var yCm = clamp(offset, 0, Math.max(b.hCm - hCm, 0));
+    state.placedItems.push({
+      id: uid("item"),
+      label: tpl.label,
+      presetKey: tpl.isPreset ? tpl.key : null,
+      isPreset: !!tpl.isPreset,
+      wCm: wCm,
+      hCm: hCm,
+      xCm: xCm,
+      yCm: yCm,
+      color: tpl.color,
+      rotated: tpl.rotated
+    });
+    renderBoard();
   }
 
   function buildTemplateCardEl(tpl, removable) {
@@ -149,9 +214,12 @@
     card.dataset.templateId = tpl.id;
     card.title = tpl.label + " (" + tpl.wCm + "×" + tpl.hCm + "cm) - 드래그하여 환경판에 배치, 회전/삭제 버튼은 카드 우측 상단";
 
+    var compact = Math.min(px.w, px.h) < 40;
+
     var label = document.createElement("div");
     label.className = "card-label";
-    label.textContent = tpl.label + "\n" + tpl.wCm + "×" + tpl.hCm + "cm";
+    label.textContent = tpl.isPreset ? tpl.label : (tpl.label + "\n" + tpl.wCm + "×" + tpl.hCm + "cm");
+    label.style.fontSize = pickFontSizePx(px.w, px.h, tpl.isPreset ? 1 : 2) + "px";
     card.appendChild(label);
 
     var controls = document.createElement("div");
@@ -160,6 +228,12 @@
     var rotateBtn = document.createElement("button");
     rotateBtn.type = "button";
     rotateBtn.className = "card-btn";
+    if (compact) {
+      var btnSize = Math.max(11, Math.min(px.w, px.h) * 0.42);
+      rotateBtn.style.width = btnSize + "px";
+      rotateBtn.style.height = btnSize + "px";
+      rotateBtn.style.fontSize = Math.max(7, btnSize * 0.55) + "px";
+    }
     rotateBtn.title = "90도 회전";
     rotateBtn.textContent = "⟳";
     rotateBtn.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
@@ -189,7 +263,7 @@
 
     card.appendChild(controls);
 
-    if (tpl.url) {
+    if (tpl.url && !compact) {
       var link = document.createElement("a");
       link.className = "card-link";
       link.href = tpl.url;
@@ -223,7 +297,8 @@
 
     var label = document.createElement("div");
     label.className = "placed-label";
-    label.textContent = item.label + "\n" + round1(item.wCm) + "×" + round1(item.hCm) + "cm";
+    label.textContent = item.isPreset ? item.label : (item.label + "\n" + round1(item.wCm) + "×" + round1(item.hCm) + "cm");
+    label.style.fontSize = pickFontSizePx(item.wCm * scale, item.hCm * scale, item.isPreset ? 1 : 2) + "px";
     div.appendChild(label);
 
     var toolbar = document.createElement("div");
@@ -339,6 +414,8 @@
       state.placedItems.push({
         id: uid("item"),
         label: tpl.label,
+        presetKey: tpl.isPreset ? tpl.key : null,
+        isPreset: !!tpl.isPreset,
         wCm: wCm,
         hCm: hCm,
         xCm: xCm,

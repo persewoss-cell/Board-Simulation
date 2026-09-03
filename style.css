@@ -199,6 +199,28 @@ body {
   color: var(--muted);
 }
 
+.template-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-btn {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  border: none;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.add-btn:hover {
+  background: var(--accent-dark);
+}
+
 /* Template cards (palette items in custom/preset galleries) */
 .template-card {
   position: relative;
