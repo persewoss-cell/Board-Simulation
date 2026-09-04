@@ -99,10 +99,16 @@
       el.boardHint.textContent = "가로/세로 값을 0보다 큰 숫자로 입력해주세요.";
       return;
     }
-    state.board = { name: el.boardNameInput.value.trim(), wCm: w, hCm: h, scale: 1, pxW: 0, pxH: 0 };
+    state.board = { name: el.boardNameInput.value.trim(), wCm: w, hCm: h, scale: 1, pxW: 0, pxH: 0, savedId: null };
     state.placedItems = [];
     state.addCascade = 0;
     activateBoardUI();
+  });
+
+  el.clearBoardBtn.addEventListener("click", function () {
+    if (!state.board) return;
+    state.placedItems = [];
+    renderBoard();
   });
 
   el.saveBoardBtn.addEventListener("click", function () {
@@ -113,7 +119,9 @@
       el.boardHint.textContent = "저장하려면 환경판 이름을 입력해주세요.";
       return;
     }
-    var existing = state.savedBoards.find(function (b) { return b.name === name; });
+    var existing = state.board.savedId
+      ? state.savedBoards.find(function (b) { return b.id === state.board.savedId; })
+      : state.savedBoards.find(function (b) { return b.name === name; });
     var entry = {
       id: existing ? existing.id : uid("saved"),
       name: name,
@@ -121,6 +129,7 @@
       hCm: state.board.hCm,
       placedItems: JSON.parse(JSON.stringify(state.placedItems))
     };
+    state.board.savedId = entry.id;
 
     if (FIREBASE_ENABLED && savedBoardsRef) {
       savedBoardsRef.child(entry.id).set(entry);
@@ -160,6 +169,7 @@
     });
     updateBoardTitle();
     renderAll();
+    syncActiveBoardToSavedEntry();
     el.boardHint.hidden = false;
     el.boardHint.textContent = "환경판 정보가 수정되었습니다.";
   });
@@ -224,7 +234,7 @@
       var nameBtn = document.createElement("button");
       nameBtn.type = "button";
       nameBtn.className = "saved-board-name-btn";
-      if (state.board && state.board.name === saved.name) nameBtn.classList.add("is-current");
+      if (state.board && (state.board.savedId === saved.id || (!state.board.savedId && state.board.name === saved.name))) nameBtn.classList.add("is-current");
       nameBtn.textContent = saved.name + " (" + saved.wCm + "×" + saved.hCm + "cm)";
       nameBtn.addEventListener("click", function () { loadSavedBoard(saved); });
       wrapper.appendChild(nameBtn);
@@ -251,7 +261,7 @@
   }
 
   function loadSavedBoard(saved) {
-    state.board = { name: saved.name, wCm: saved.wCm, hCm: saved.hCm, scale: 1, pxW: 0, pxH: 0 };
+    state.board = { name: saved.name, wCm: saved.wCm, hCm: saved.hCm, scale: 1, pxW: 0, pxH: 0, savedId: saved.id };
     state.placedItems = JSON.parse(JSON.stringify(saved.placedItems));
     state.addCascade = 0;
     el.boardNameInput.value = saved.name;
@@ -259,6 +269,27 @@
     el.boardHeightInput.value = saved.hCm;
     activateBoardUI();
     renderSavedBoardsList();
+  }
+
+  function syncActiveBoardToSavedEntry() {
+    if (!state.board || !state.board.savedId) return;
+    var entry = {
+      id: state.board.savedId,
+      name: state.board.name,
+      wCm: state.board.wCm,
+      hCm: state.board.hCm,
+      placedItems: JSON.parse(JSON.stringify(state.placedItems))
+    };
+    if (FIREBASE_ENABLED && savedBoardsRef) {
+      savedBoardsRef.child(entry.id).set(entry);
+    } else {
+      var idx = state.savedBoards.findIndex(function (b) { return b.id === entry.id; });
+      if (idx >= 0) {
+        state.savedBoards[idx] = entry;
+        persistSavedBoards();
+        renderSavedBoardsList();
+      }
+    }
   }
 
   function setPanelEnabled(panelEl, enabled) {
