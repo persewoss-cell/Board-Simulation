@@ -439,6 +439,13 @@ body {
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
+.app-footer {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
 @media (max-width: 640px) {
   .app-header h1 { font-size: 1.4rem; }
   .input-row { gap: 10px; }
