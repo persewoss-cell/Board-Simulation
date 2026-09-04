@@ -67,6 +67,7 @@
     boardHeightInput: document.getElementById("boardHeightInput"),
     applyBoardBtn: document.getElementById("applyBoardBtn"),
     saveBoardBtn: document.getElementById("saveBoardBtn"),
+    editBoardBtn: document.getElementById("editBoardBtn"),
     deleteBoardBtn: document.getElementById("deleteBoardBtn"),
     boardHint: document.getElementById("boardHint"),
     savedBoardsList: document.getElementById("savedBoardsList"),
@@ -135,6 +136,32 @@
     }
     el.boardHint.hidden = false;
     el.boardHint.textContent = "“" + name + "” 환경판이 저장되었습니다.";
+  });
+
+  el.editBoardBtn.addEventListener("click", function () {
+    if (!state.board) {
+      el.boardHint.hidden = false;
+      el.boardHint.textContent = "수정하려면 먼저 환경판을 생성해주세요.";
+      return;
+    }
+    var w = parseFloat(el.boardWidthInput.value);
+    var h = parseFloat(el.boardHeightInput.value);
+    if (!(w > 0) || !(h > 0)) {
+      el.boardHint.hidden = false;
+      el.boardHint.textContent = "가로/세로 값을 0보다 큰 숫자로 입력해주세요.";
+      return;
+    }
+    state.board.name = el.boardNameInput.value.trim();
+    state.board.wCm = w;
+    state.board.hCm = h;
+    state.placedItems.forEach(function (item) {
+      item.xCm = clamp(item.xCm, 0, Math.max(w - item.wCm, 0));
+      item.yCm = clamp(item.yCm, 0, Math.max(h - item.hCm, 0));
+    });
+    updateBoardTitle();
+    renderAll();
+    el.boardHint.hidden = false;
+    el.boardHint.textContent = "환경판 정보가 수정되었습니다.";
   });
 
   el.deleteBoardBtn.addEventListener("click", function () {

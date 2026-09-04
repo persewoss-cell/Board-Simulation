@@ -71,7 +71,7 @@ body {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   overflow-x: auto;
   padding-bottom: 2px;
 }
@@ -99,7 +99,7 @@ body {
 }
 
 .input-row input[type="text"] {
-  width: 150px;
+  width: 130px;
 }
 
 .input-row .unit {
@@ -107,8 +107,8 @@ body {
 }
 
 .input-row button {
-  padding: 9px 18px;
-  font-size: 0.95rem;
+  padding: 9px 14px;
+  font-size: 0.9rem;
   border: none;
   border-radius: 6px;
   background: var(--accent);
@@ -136,6 +136,16 @@ body {
 
 .input-row button.secondary-btn:hover:not(:disabled) {
   background: #257e58;
+}
+
+.input-row button.edit-btn {
+  background: #d9822b;
+  border: none;
+  color: #fff;
+}
+
+.input-row button.edit-btn:hover:not(:disabled) {
+  background: #b56820;
 }
 
 .input-row button.danger-btn {
