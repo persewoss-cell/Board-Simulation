@@ -306,7 +306,7 @@
       addBtn.type = "button";
       addBtn.className = "add-btn";
       addBtn.textContent = "추가";
-      addBtn.title = "환경판 우측 하단에 추가";
+      addBtn.title = "환경판 좌측 하단에 추가";
       addBtn.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
       addBtn.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -324,7 +324,7 @@
     var wCm = tpl.wCm, hCm = tpl.hCm;
     var offset = (state.addCascade % 6) * 2.5;
     state.addCascade++;
-    var xCm = clamp(b.wCm - wCm - offset, 0, Math.max(b.wCm - wCm, 0));
+    var xCm = clamp(offset, 0, Math.max(b.wCm - wCm, 0));
     var yCm = clamp(b.hCm - hCm - offset, 0, Math.max(b.hCm - hCm, 0));
     state.placedItems.push({
       id: uid("item"),
