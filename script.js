@@ -64,6 +64,7 @@
     clearBoardBtn: document.getElementById("clearBoardBtn"),
     saveImageBtn: document.getElementById("saveImageBtn"),
     customPanel: document.getElementById("customPanel"),
+    customNameInput: document.getElementById("customNameInput"),
     customWidthInput: document.getElementById("customWidthInput"),
     customHeightInput: document.getElementById("customHeightInput"),
     addCustomBtn: document.getElementById("addCustomBtn"),
@@ -491,15 +492,17 @@
     var w = parseFloat(el.customWidthInput.value);
     var h = parseFloat(el.customHeightInput.value);
     if (!(w > 0) || !(h > 0)) return;
+    var name = el.customNameInput.value.trim();
     var color = CUSTOM_COLORS[state.customTemplates.length % CUSTOM_COLORS.length];
     state.customTemplates.push({
       id: uid("custom"),
-      label: "커스텀",
+      label: name || "커스텀",
       wCm: round1(w),
       hCm: round1(h),
       color: color,
       rotated: false
     });
+    el.customNameInput.value = "";
     el.customWidthInput.value = "";
     el.customHeightInput.value = "";
     renderCustomGallery();
