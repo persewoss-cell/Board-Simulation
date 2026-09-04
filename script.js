@@ -5,11 +5,11 @@
   var STORAGE_KEY = "hallway-sim-saved-boards-v1";
 
   var PRESETS = [
-    { key: "4x6", label: "4×6", wCm: round1(4 * IN_TO_CM), hCm: round1(6 * IN_TO_CM), color: "#e2725b", url: "https://galleryunsu.co.kr/product/list.html?cate_no=70" },
-    { key: "5x7", label: "5×7", wCm: round1(5 * IN_TO_CM), hCm: round1(7 * IN_TO_CM), color: "#4f9d69", url: "https://galleryunsu.co.kr/product/list.html?cate_no=71" },
-    { key: "a4", label: "A4", wCm: 21.0, hCm: 29.7, color: "#c98a3e", url: "https://galleryunsu.co.kr/product/list.html?cate_no=73" },
-    { key: "8jeol", label: "8절", wCm: 27.3, hCm: 39.4, color: "#d1487a", url: "https://galleryunsu.co.kr/product/list.html?cate_no=94" },
-    { key: "a3", label: "A3", wCm: 29.7, hCm: 42.0, color: "#8a5cb5", url: "https://galleryunsu.co.kr/product/list.html?cate_no=74" }
+    { key: "4x6", label: "4×6", wCm: round1(6 * IN_TO_CM), hCm: round1(4 * IN_TO_CM), color: "#e2725b", url: "https://galleryunsu.co.kr/product/list.html?cate_no=70" },
+    { key: "5x7", label: "5×7", wCm: round1(7 * IN_TO_CM), hCm: round1(5 * IN_TO_CM), color: "#4f9d69", url: "https://galleryunsu.co.kr/product/list.html?cate_no=71" },
+    { key: "a4", label: "A4", wCm: 29.7, hCm: 21.0, color: "#c98a3e", url: "https://galleryunsu.co.kr/product/list.html?cate_no=73" },
+    { key: "8jeol", label: "8절", wCm: 39.4, hCm: 27.3, color: "#d1487a", url: "https://galleryunsu.co.kr/product/list.html?cate_no=94" },
+    { key: "a3", label: "A3", wCm: 42.0, hCm: 29.7, color: "#8a5cb5", url: "https://galleryunsu.co.kr/product/list.html?cate_no=74" }
   ];
 
   var CUSTOM_COLORS = ["#3d6ee0", "#2ba7a0", "#e0a83d", "#8a5cb5", "#c9556f", "#5a9c4c", "#3d8fe0", "#e07d3d"];
