@@ -129,23 +129,23 @@ body {
 }
 
 .input-row button.secondary-btn {
-  background: #fff;
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: #2f9e6e;
+  border: none;
+  color: #fff;
 }
 
 .input-row button.secondary-btn:hover:not(:disabled) {
-  background: #f0f2f5;
+  background: #257e58;
 }
 
 .input-row button.danger-btn {
-  background: #fff;
-  border: 1px solid #e0b3ba;
-  color: #b0303f;
+  background: #d0455a;
+  border: none;
+  color: #fff;
 }
 
 .input-row button.danger-btn:hover:not(:disabled) {
-  background: #fdf1f2;
+  background: #b13548;
 }
 
 .hint {
