@@ -2,14 +2,14 @@
   "use strict";
 
   var IN_TO_CM = 2.54;
+  var STORAGE_KEY = "hallway-sim-saved-boards-v1";
 
   var PRESETS = [
     { key: "4x6", label: "4×6", wCm: round1(4 * IN_TO_CM), hCm: round1(6 * IN_TO_CM), color: "#e2725b", url: "https://galleryunsu.co.kr/product/list.html?cate_no=70" },
     { key: "5x7", label: "5×7", wCm: round1(5 * IN_TO_CM), hCm: round1(7 * IN_TO_CM), color: "#4f9d69", url: "https://galleryunsu.co.kr/product/list.html?cate_no=71" },
-    { key: "a5", label: "A5", wCm: round1(6 * IN_TO_CM), hCm: round1(8 * IN_TO_CM), color: "#4a7fbf", url: "https://galleryunsu.co.kr/product/list.html?cate_no=72" },
     { key: "a4", label: "A4", wCm: 21.0, hCm: 29.7, color: "#c98a3e", url: "https://galleryunsu.co.kr/product/list.html?cate_no=73" },
-    { key: "a3", label: "A3", wCm: 29.7, hCm: 42.0, color: "#8a5cb5", url: "https://galleryunsu.co.kr/product/list.html?cate_no=74" },
-    { key: "8jeol", label: "8절", wCm: 27.3, hCm: 39.4, color: "#d1487a", url: "https://galleryunsu.co.kr/product/list.html?cate_no=94" }
+    { key: "8jeol", label: "8절", wCm: 27.3, hCm: 39.4, color: "#d1487a", url: "https://galleryunsu.co.kr/product/list.html?cate_no=94" },
+    { key: "a3", label: "A3", wCm: 29.7, hCm: 42.0, color: "#8a5cb5", url: "https://galleryunsu.co.kr/product/list.html?cate_no=74" }
   ];
 
   var CUSTOM_COLORS = ["#3d6ee0", "#2ba7a0", "#e0a83d", "#8a5cb5", "#c9556f", "#5a9c4c", "#3d8fe0", "#e07d3d"];
@@ -18,26 +18,51 @@
   function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
   function uid(prefix) { return prefix + "-" + Math.random().toString(36).slice(2, 9); }
 
+  function loadSavedBoards() {
+    try {
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      var parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function persistSavedBoards() {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedBoards));
+    } catch (err) {
+      // storage unavailable (private mode / quota) - saved list stays in-memory only
+    }
+  }
+
   var state = {
-    board: null, // { wCm, hCm, scale, pxW, pxH }
+    board: null, // { name, wCm, hCm, scale, pxW, pxH }
     presetTemplates: PRESETS.map(function (p, i) {
       return { id: "preset-" + i, key: p.key, isPreset: true, label: p.label, baseWCm: p.wCm, baseHCm: p.hCm, wCm: p.wCm, hCm: p.hCm, color: p.color, url: p.url, rotated: false };
     }),
     customTemplates: [],
     placedItems: [],
-    addCascade: 0
+    addCascade: 0,
+    savedBoards: loadSavedBoards() // [{ id, name, wCm, hCm, placedItems }]
   };
 
   var el = {
+    boardNameInput: document.getElementById("boardNameInput"),
     boardWidthInput: document.getElementById("boardWidthInput"),
     boardHeightInput: document.getElementById("boardHeightInput"),
     applyBoardBtn: document.getElementById("applyBoardBtn"),
+    saveBoardBtn: document.getElementById("saveBoardBtn"),
+    deleteBoardBtn: document.getElementById("deleteBoardBtn"),
     boardHint: document.getElementById("boardHint"),
+    savedBoardsList: document.getElementById("savedBoardsList"),
+    boardTitle: document.getElementById("boardTitle"),
     boardWrapper: document.getElementById("boardWrapper"),
     board: document.getElementById("board"),
     boardPlaceholder: document.getElementById("boardPlaceholder"),
     boardInfo: document.getElementById("boardInfo"),
     clearBoardBtn: document.getElementById("clearBoardBtn"),
+    saveImageBtn: document.getElementById("saveImageBtn"),
     customPanel: document.getElementById("customPanel"),
     customWidthInput: document.getElementById("customWidthInput"),
     customHeightInput: document.getElementById("customHeightInput"),
@@ -54,24 +79,136 @@
     var w = parseFloat(el.boardWidthInput.value);
     var h = parseFloat(el.boardHeightInput.value);
     if (!(w > 0) || !(h > 0)) {
+      el.boardHint.hidden = false;
       el.boardHint.textContent = "가로/세로 값을 0보다 큰 숫자로 입력해주세요.";
       return;
     }
-    state.board = { wCm: w, hCm: h, scale: 1, pxW: 0, pxH: 0 };
+    state.board = { name: el.boardNameInput.value.trim(), wCm: w, hCm: h, scale: 1, pxW: 0, pxH: 0 };
     state.placedItems = [];
+    state.addCascade = 0;
+    activateBoardUI();
+  });
+
+  el.saveBoardBtn.addEventListener("click", function () {
+    if (!state.board) return;
+    var name = state.board.name;
+    if (!name) {
+      el.boardHint.hidden = false;
+      el.boardHint.textContent = "저장하려면 환경판 이름을 입력해주세요.";
+      return;
+    }
+    var entry = {
+      id: uid("saved"),
+      name: name,
+      wCm: state.board.wCm,
+      hCm: state.board.hCm,
+      placedItems: JSON.parse(JSON.stringify(state.placedItems))
+    };
+    var existingIndex = state.savedBoards.findIndex(function (b) { return b.name === name; });
+    if (existingIndex >= 0) {
+      entry.id = state.savedBoards[existingIndex].id;
+      state.savedBoards[existingIndex] = entry;
+    } else {
+      state.savedBoards.push(entry);
+    }
+    persistSavedBoards();
+    renderSavedBoardsList();
+    el.boardHint.hidden = false;
+    el.boardHint.textContent = "“" + name + "” 환경판이 저장되었습니다.";
+  });
+
+  el.deleteBoardBtn.addEventListener("click", function () {
+    if (!state.board) return;
+    if (!window.confirm("현재 진행 중인 환경판을 삭제하시겠습니까? 저장하지 않은 배치 내용은 사라집니다.")) return;
+    resetBoardToEmpty();
+  });
+
+  function activateBoardUI() {
     el.board.classList.remove("board-empty");
     el.boardHint.hidden = true;
     setPanelEnabled(el.customPanel, true);
     setPanelEnabled(el.presetPanel, true);
     el.clearBoardBtn.disabled = false;
+    el.saveImageBtn.disabled = false;
+    updateBoardTitle();
     renderAll();
-  });
+  }
 
-  el.clearBoardBtn.addEventListener("click", function () {
-    if (!state.board) return;
+  function resetBoardToEmpty() {
+    state.board = null;
     state.placedItems = [];
-    renderBoard();
-  });
+    state.addCascade = 0;
+    el.board.classList.add("board-empty");
+    el.board.innerHTML = "";
+    el.board.appendChild(el.boardPlaceholder);
+    el.board.style.width = "";
+    el.board.style.height = "";
+    el.board.style.backgroundImage = "";
+    el.boardInfo.textContent = "";
+    el.boardNameInput.value = "";
+    setPanelEnabled(el.customPanel, false);
+    setPanelEnabled(el.presetPanel, false);
+    el.clearBoardBtn.disabled = true;
+    el.saveImageBtn.disabled = true;
+    el.customGallery.innerHTML = "";
+    el.presetGallery.innerHTML = "";
+    updateBoardTitle();
+    el.boardHint.hidden = false;
+    el.boardHint.textContent = "환경판 이름과 가로/세로 크기(cm)를 입력하고 ‘환경판 생성’을 눌러주세요.";
+  }
+
+  function updateBoardTitle() {
+    var name = state.board && state.board.name ? state.board.name : "";
+    el.boardTitle.innerHTML = "";
+    var icon = document.createElement("span");
+    icon.className = "heading-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "🖼️";
+    el.boardTitle.appendChild(icon);
+    el.boardTitle.appendChild(document.createTextNode(" 환경판" + (name ? "[" + name + "]" : "")));
+  }
+
+  function renderSavedBoardsList() {
+    el.savedBoardsList.innerHTML = "";
+    state.savedBoards.forEach(function (saved) {
+      var wrapper = document.createElement("div");
+      wrapper.className = "saved-board-item";
+
+      var nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.className = "saved-board-name-btn";
+      if (state.board && state.board.name === saved.name) nameBtn.classList.add("is-current");
+      nameBtn.textContent = saved.name + " (" + saved.wCm + "×" + saved.hCm + "cm)";
+      nameBtn.addEventListener("click", function () { loadSavedBoard(saved); });
+      wrapper.appendChild(nameBtn);
+
+      var delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "saved-board-delete-btn";
+      delBtn.title = "완전히 삭제";
+      delBtn.textContent = "🗑️";
+      delBtn.addEventListener("click", function () {
+        if (!window.confirm("“" + saved.name + "” 환경판을 완전히 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) return;
+        state.savedBoards = state.savedBoards.filter(function (b) { return b.id !== saved.id; });
+        persistSavedBoards();
+        renderSavedBoardsList();
+      });
+      wrapper.appendChild(delBtn);
+
+      el.savedBoardsList.appendChild(wrapper);
+    });
+  }
+
+  function loadSavedBoard(saved) {
+    state.board = { name: saved.name, wCm: saved.wCm, hCm: saved.hCm, scale: 1, pxW: 0, pxH: 0 };
+    state.placedItems = JSON.parse(JSON.stringify(saved.placedItems));
+    state.addCascade = 0;
+    el.boardNameInput.value = saved.name;
+    el.boardWidthInput.value = saved.wCm;
+    el.boardHeightInput.value = saved.hCm;
+    activateBoardUI();
+    renderSavedBoardsList();
+  }
 
   function setPanelEnabled(panelEl, enabled) {
     panelEl.classList.toggle("is-disabled", !enabled);
@@ -136,7 +273,7 @@
     el.customGallery.innerHTML = "";
     if (!state.board) return;
     state.customTemplates.forEach(function (tpl) {
-      el.customGallery.appendChild(buildTemplateItemEl(tpl, { removable: true, addButton: false }));
+      el.customGallery.appendChild(buildTemplateItemEl(tpl, { removable: true, addButton: true }));
     });
   }
 
@@ -169,7 +306,7 @@
       addBtn.type = "button";
       addBtn.className = "add-btn";
       addBtn.textContent = "추가";
-      addBtn.title = "환경판 우측 상단에 추가";
+      addBtn.title = "환경판 우측 하단에 추가";
       addBtn.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
       addBtn.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -188,7 +325,7 @@
     var offset = (state.addCascade % 6) * 2.5;
     state.addCascade++;
     var xCm = clamp(b.wCm - wCm - offset, 0, Math.max(b.wCm - wCm, 0));
-    var yCm = clamp(offset, 0, Math.max(b.hCm - hCm, 0));
+    var yCm = clamp(b.hCm - hCm - offset, 0, Math.max(b.hCm - hCm, 0));
     state.placedItems.push({
       id: uid("item"),
       label: tpl.label,
@@ -368,6 +505,21 @@
     renderCustomGallery();
   });
 
+  // ---------- Save board as image ----------
+
+  el.saveImageBtn.addEventListener("click", function () {
+    if (!state.board || typeof window.html2canvas !== "function") return;
+    var fileName = (state.board.name ? state.board.name : "환경판") + ".png";
+    window.html2canvas(el.board, { backgroundColor: "#fbfbfc", scale: 2 }).then(function (canvas) {
+      var link = document.createElement("a");
+      link.download = fileName;
+      link.href = canvas.toDataURL("image/png");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  });
+
   // ---------- Drag: template -> board (duplicate on drag) ----------
 
   function startTemplateDrag(e, tpl) {
@@ -474,4 +626,8 @@
       if (state.board) renderAll();
     });
   });
+
+  // ---------- Init ----------
+
+  renderSavedBoardsList();
 })();
