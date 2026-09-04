@@ -70,7 +70,6 @@
     deleteBoardBtn: document.getElementById("deleteBoardBtn"),
     boardHint: document.getElementById("boardHint"),
     savedBoardsList: document.getElementById("savedBoardsList"),
-    cloudSyncHint: document.getElementById("cloudSyncHint"),
     boardTitle: document.getElementById("boardTitle"),
     boardWrapper: document.getElementById("boardWrapper"),
     board: document.getElementById("board"),
@@ -657,14 +656,10 @@
   // ---------- Cloud sync (Firebase Realtime Database) ----------
 
   function initCloudSync() {
-    if (!FIREBASE_ENABLED) {
-      el.cloudSyncHint.textContent = "☁️ 클라우드 동기화가 아직 설정되지 않아, 저장한 환경판은 이 브라우저에만 보관됩니다.";
-      return;
-    }
+    if (!FIREBASE_ENABLED) return;
     try {
       firebase.initializeApp(FIREBASE_CONFIG);
       savedBoardsRef = firebase.database().ref("savedBoards");
-      el.cloudSyncHint.textContent = "☁️ 클라우드에 연결되어 있어요. 저장한 환경판은 어떤 기기·브라우저에서도 보이며, 삭제 전까지 유지됩니다.";
       savedBoardsRef.on("value", function (snapshot) {
         var val = snapshot.val() || {};
         state.savedBoards = Object.keys(val).map(function (id) {
@@ -679,12 +674,9 @@
         });
         persistSavedBoards();
         renderSavedBoardsList();
-      }, function () {
-        el.cloudSyncHint.textContent = "☁️ 클라우드 연결에 실패했습니다. 이 브라우저에 저장된 목록만 표시됩니다.";
       });
     } catch (err) {
       FIREBASE_ENABLED = false;
-      el.cloudSyncHint.textContent = "☁️ 클라우드 연결에 실패했습니다. 이 브라우저에 저장된 목록만 표시됩니다.";
     }
   }
 
