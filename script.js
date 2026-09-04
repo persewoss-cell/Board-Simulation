@@ -4,6 +4,20 @@
   var IN_TO_CM = 2.54;
   var STORAGE_KEY = "hallway-sim-saved-boards-v1";
 
+  // Fill these in with your Firebase project's config (Project settings > General > Your apps > SDK setup)
+  // to enable cross-device cloud sync. Until then, saved boards stay local to this browser only.
+  var FIREBASE_CONFIG = {
+    apiKey: "REPLACE_ME",
+    authDomain: "REPLACE_ME",
+    databaseURL: "REPLACE_ME",
+    projectId: "REPLACE_ME",
+    storageBucket: "REPLACE_ME",
+    messagingSenderId: "REPLACE_ME",
+    appId: "REPLACE_ME"
+  };
+  var FIREBASE_ENABLED = FIREBASE_CONFIG.apiKey.indexOf("REPLACE_ME") === -1 && typeof firebase !== "undefined";
+  var savedBoardsRef = null;
+
   var PRESETS = [
     { key: "4x6", label: "4×6", wCm: round1(6 * IN_TO_CM), hCm: round1(4 * IN_TO_CM), color: "#e2725b", url: "https://galleryunsu.co.kr/product/list.html?cate_no=70" },
     { key: "5x7", label: "5×7", wCm: round1(7 * IN_TO_CM), hCm: round1(5 * IN_TO_CM), color: "#4f9d69", url: "https://galleryunsu.co.kr/product/list.html?cate_no=71" },
@@ -56,6 +70,7 @@
     deleteBoardBtn: document.getElementById("deleteBoardBtn"),
     boardHint: document.getElementById("boardHint"),
     savedBoardsList: document.getElementById("savedBoardsList"),
+    cloudSyncHint: document.getElementById("cloudSyncHint"),
     boardTitle: document.getElementById("boardTitle"),
     boardWrapper: document.getElementById("boardWrapper"),
     board: document.getElementById("board"),
@@ -98,22 +113,27 @@
       el.boardHint.textContent = "저장하려면 환경판 이름을 입력해주세요.";
       return;
     }
+    var existing = state.savedBoards.find(function (b) { return b.name === name; });
     var entry = {
-      id: uid("saved"),
+      id: existing ? existing.id : uid("saved"),
       name: name,
       wCm: state.board.wCm,
       hCm: state.board.hCm,
       placedItems: JSON.parse(JSON.stringify(state.placedItems))
     };
-    var existingIndex = state.savedBoards.findIndex(function (b) { return b.name === name; });
-    if (existingIndex >= 0) {
-      entry.id = state.savedBoards[existingIndex].id;
-      state.savedBoards[existingIndex] = entry;
+
+    if (FIREBASE_ENABLED && savedBoardsRef) {
+      savedBoardsRef.child(entry.id).set(entry);
+      // the realtime listener updates state.savedBoards and re-renders the list
     } else {
-      state.savedBoards.push(entry);
+      if (existing) {
+        state.savedBoards[state.savedBoards.indexOf(existing)] = entry;
+      } else {
+        state.savedBoards.push(entry);
+      }
+      persistSavedBoards();
+      renderSavedBoardsList();
     }
-    persistSavedBoards();
-    renderSavedBoardsList();
     el.boardHint.hidden = false;
     el.boardHint.textContent = "“" + name + "” 환경판이 저장되었습니다.";
   });
@@ -190,9 +210,13 @@
       delBtn.textContent = "🗑️";
       delBtn.addEventListener("click", function () {
         if (!window.confirm("“" + saved.name + "” 환경판을 완전히 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) return;
-        state.savedBoards = state.savedBoards.filter(function (b) { return b.id !== saved.id; });
-        persistSavedBoards();
-        renderSavedBoardsList();
+        if (FIREBASE_ENABLED && savedBoardsRef) {
+          savedBoardsRef.child(saved.id).remove();
+        } else {
+          state.savedBoards = state.savedBoards.filter(function (b) { return b.id !== saved.id; });
+          persistSavedBoards();
+          renderSavedBoardsList();
+        }
       });
       wrapper.appendChild(delBtn);
 
@@ -630,7 +654,42 @@
     });
   });
 
+  // ---------- Cloud sync (Firebase Realtime Database) ----------
+
+  function initCloudSync() {
+    if (!FIREBASE_ENABLED) {
+      el.cloudSyncHint.textContent = "☁️ 클라우드 동기화가 아직 설정되지 않아, 저장한 환경판은 이 브라우저에만 보관됩니다.";
+      return;
+    }
+    try {
+      firebase.initializeApp(FIREBASE_CONFIG);
+      savedBoardsRef = firebase.database().ref("savedBoards");
+      el.cloudSyncHint.textContent = "☁️ 클라우드에 연결되어 있어요. 저장한 환경판은 어떤 기기·브라우저에서도 보이며, 삭제 전까지 유지됩니다.";
+      savedBoardsRef.on("value", function (snapshot) {
+        var val = snapshot.val() || {};
+        state.savedBoards = Object.keys(val).map(function (id) {
+          var b = val[id] || {};
+          return {
+            id: id,
+            name: b.name || "",
+            wCm: b.wCm,
+            hCm: b.hCm,
+            placedItems: Array.isArray(b.placedItems) ? b.placedItems : []
+          };
+        });
+        persistSavedBoards();
+        renderSavedBoardsList();
+      }, function () {
+        el.cloudSyncHint.textContent = "☁️ 클라우드 연결에 실패했습니다. 이 브라우저에 저장된 목록만 표시됩니다.";
+      });
+    } catch (err) {
+      FIREBASE_ENABLED = false;
+      el.cloudSyncHint.textContent = "☁️ 클라우드 연결에 실패했습니다. 이 브라우저에 저장된 목록만 표시됩니다.";
+    }
+  }
+
   // ---------- Init ----------
 
   renderSavedBoardsList();
+  initCloudSync();
 })();

@@ -33,6 +33,7 @@
     </div>
     <p class="hint" id="boardHint">환경판 이름과 가로/세로 크기(cm)를 입력하고 &lsquo;환경판 생성&rsquo;을 눌러주세요.</p>
     <div class="saved-boards" id="savedBoardsList"></div>
+    <p class="hint cloud-hint" id="cloudSyncHint"></p>
   </section>
 
   <section class="panel board-panel">
@@ -81,6 +82,8 @@
 <div class="drag-ghost" id="dragGhost" hidden></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
