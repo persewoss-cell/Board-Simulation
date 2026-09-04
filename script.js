@@ -7,13 +7,13 @@
   // Fill these in with your Firebase project's config (Project settings > General > Your apps > SDK setup)
   // to enable cross-device cloud sync. Until then, saved boards stay local to this browser only.
   var FIREBASE_CONFIG = {
-    apiKey: "REPLACE_ME",
-    authDomain: "REPLACE_ME",
-    databaseURL: "REPLACE_ME",
-    projectId: "REPLACE_ME",
-    storageBucket: "REPLACE_ME",
-    messagingSenderId: "REPLACE_ME",
-    appId: "REPLACE_ME"
+    apiKey: "AIzaSyC17GblkenoyqLGyRw8oWARkyJdxOMkK5U",
+    authDomain: "board-simulation.firebaseapp.com",
+    databaseURL: "https://board-simulation-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "board-simulation",
+    storageBucket: "board-simulation.firebasestorage.app",
+    messagingSenderId: "624011562156",
+    appId: "1:624011562156:web:b8999c39a4a69e83212309"
   };
   var FIREBASE_ENABLED = FIREBASE_CONFIG.apiKey.indexOf("REPLACE_ME") === -1 && typeof firebase !== "undefined";
   var savedBoardsRef = null;
