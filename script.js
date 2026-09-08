@@ -1,7 +1,6 @@
 (function () {
   "use strict";
 
-  var IN_TO_CM = 2.54;
   var STORAGE_KEY = "hallway-sim-saved-boards-v1";
 
   // Fill these in with your Firebase project's config (Project settings > General > Your apps > SDK setup)
@@ -18,12 +17,15 @@
   var FIREBASE_ENABLED = FIREBASE_CONFIG.apiKey.indexOf("REPLACE_ME") === -1 && typeof firebase !== "undefined";
   var savedBoardsRef = null;
 
+  // Actual outer frame sizes (envelope-type paper frames), not the print/paper size -
+  // the frame itself is bigger than the photo it holds. Stored landscape by default
+  // (wCm >= hCm), matching the frame vendor's 가로×세로 measurements.
   var PRESETS = [
-    { key: "4x6", label: "4×6", wCm: round1(6 * IN_TO_CM), hCm: round1(4 * IN_TO_CM), color: "#e2725b", url: "https://galleryunsu.co.kr/product/list.html?cate_no=70" },
-    { key: "5x7", label: "5×7", wCm: round1(7 * IN_TO_CM), hCm: round1(5 * IN_TO_CM), color: "#4f9d69", url: "https://galleryunsu.co.kr/product/list.html?cate_no=71" },
-    { key: "a4", label: "A4", wCm: 29.7, hCm: 21.0, color: "#c98a3e", url: "https://galleryunsu.co.kr/product/list.html?cate_no=73" },
-    { key: "8jeol", label: "8절", wCm: 39.4, hCm: 27.3, color: "#d1487a", url: "https://galleryunsu.co.kr/product/list.html?cate_no=94" },
-    { key: "a3", label: "A3", wCm: 42.0, hCm: 29.7, color: "#8a5cb5", url: "https://galleryunsu.co.kr/product/list.html?cate_no=74" }
+    { key: "4x6", label: "4×6", wCm: 18.5, hCm: 12.9, color: "#e2725b", url: "https://galleryunsu.co.kr/product/list.html?cate_no=70" },
+    { key: "5x7", label: "5×7", wCm: 21.6, hCm: 16.0, color: "#4f9d69", url: "https://galleryunsu.co.kr/product/list.html?cate_no=71" },
+    { key: "a4", label: "A4", wCm: 35.2, hCm: 26.3, color: "#c98a3e", url: "https://galleryunsu.co.kr/product/list.html?cate_no=73" },
+    { key: "8jeol", label: "8절", wCm: 46.6, hCm: 34.4, color: "#d1487a", url: "https://galleryunsu.co.kr/product/list.html?cate_no=94" },
+    { key: "a3", label: "A3", wCm: 50.1, hCm: 37.5, color: "#8a5cb5", url: "https://galleryunsu.co.kr/product/list.html?cate_no=74" }
   ];
 
   var CUSTOM_COLORS = ["#3d6ee0", "#2ba7a0", "#e0a83d", "#8a5cb5", "#c9556f", "#5a9c4c", "#3d8fe0", "#e07d3d"];
@@ -31,6 +33,36 @@
   function round1(n) { return Math.round(n * 10) / 10; }
   function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
   function uid(prefix) { return prefix + "-" + Math.random().toString(36).slice(2, 9); }
+
+  // Re-applies the current PRESETS size to a placed item that came from a preset
+  // (matched by presetKey, honoring its rotated flag), so preset dimension changes
+  // (e.g. correcting a frame size) retroactively resize items already placed with
+  // the old numbers. Returns true if the item's size actually changed.
+  function migratePlacedItemPresetSize(item) {
+    if (!item.presetKey) return false;
+    var preset = PRESETS.find(function (p) { return p.key === item.presetKey; });
+    if (!preset) return false;
+    var newW = item.rotated ? preset.hCm : preset.wCm;
+    var newH = item.rotated ? preset.wCm : preset.hCm;
+    if (item.wCm === newW && item.hCm === newH) return false;
+    item.wCm = newW;
+    item.hCm = newH;
+    return true;
+  }
+
+  function migratePlacedItems(items, boardWCm, boardHCm) {
+    var changed = false;
+    items.forEach(function (item) {
+      if (migratePlacedItemPresetSize(item)) changed = true;
+    });
+    if (changed) {
+      items.forEach(function (item) {
+        item.xCm = clamp(item.xCm, 0, Math.max(boardWCm - item.wCm, 0));
+        item.yCm = clamp(item.yCm, 0, Math.max(boardHCm - item.hCm, 0));
+      });
+    }
+    return changed;
+  }
 
   function loadSavedBoards() {
     try {
@@ -264,6 +296,9 @@
     state.board = { name: saved.name, wCm: saved.wCm, hCm: saved.hCm, scale: 1, pxW: 0, pxH: 0, savedId: saved.id };
     state.placedItems = JSON.parse(JSON.stringify(saved.placedItems));
     state.addCascade = 0;
+    if (migratePlacedItems(state.placedItems, state.board.wCm, state.board.hCm)) {
+      syncActiveBoardToSavedEntry();
+    }
     el.boardNameInput.value = saved.name;
     el.boardWidthInput.value = saved.wCm;
     el.boardHeightInput.value = saved.hCm;
@@ -730,6 +765,11 @@
             placedItems: Array.isArray(b.placedItems) ? b.placedItems : []
           };
         });
+        state.savedBoards.forEach(function (saved) {
+          if (migratePlacedItems(saved.placedItems, saved.wCm, saved.hCm)) {
+            savedBoardsRef.child(saved.id).set(saved);
+          }
+        });
         persistSavedBoards();
         renderSavedBoardsList();
       });
@@ -739,6 +779,14 @@
   }
 
   // ---------- Init ----------
+
+  (function migrateLocalSavedBoardsOnLoad() {
+    var anyChanged = false;
+    state.savedBoards.forEach(function (saved) {
+      if (migratePlacedItems(saved.placedItems, saved.wCm, saved.hCm)) anyChanged = true;
+    });
+    if (anyChanged) persistSavedBoards();
+  })();
 
   renderSavedBoardsList();
   initCloudSync();
