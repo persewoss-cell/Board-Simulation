@@ -34,6 +34,21 @@ body {
   font-size: 1.8rem;
 }
 
+.app-title {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.app-icon {
+  width: 1.8em;
+  height: 1.8em;
+  flex-shrink: 0;
+  border-radius: 22%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
 .subtitle {
   margin: 0;
   color: var(--muted);
