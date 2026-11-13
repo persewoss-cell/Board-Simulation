@@ -93,6 +93,24 @@
     savedBoards: loadSavedBoards() // [{ id, name, wCm, hCm, placedItems }]
   };
 
+  // Live collaboration room state (see "Collaboration room" below).
+  var collab = {
+    active: false,
+    code: null,
+    clientId: uid("user"),
+    name: "",
+    color: "",
+    roomRef: null,
+    draggingId: null, // id of the placed item this browser is dragging right now
+    members: {},
+    cursors: {},
+    cursorLayer: (function () {
+      var layer = document.createElement("div");
+      layer.className = "collab-cursor-layer";
+      return layer;
+    })()
+  };
+
   var el = {
     boardNameInput: document.getElementById("boardNameInput"),
     boardWidthInput: document.getElementById("boardWidthInput"),
@@ -135,12 +153,14 @@
     state.placedItems = [];
     state.addCascade = 0;
     activateBoardUI();
+    collabSyncAll();
   });
 
   el.clearBoardBtn.addEventListener("click", function () {
     if (!state.board) return;
     state.placedItems = [];
     renderBoard();
+    collabSyncAll();
   });
 
   el.saveBoardBtn.addEventListener("click", function () {
@@ -162,6 +182,7 @@
       placedItems: JSON.parse(JSON.stringify(state.placedItems))
     };
     state.board.savedId = entry.id;
+    collabSyncBoardMeta();
 
     if (FIREBASE_ENABLED && savedBoardsRef) {
       savedBoardsRef.child(entry.id).set(entry);
@@ -202,6 +223,7 @@
     updateBoardTitle();
     renderAll();
     syncActiveBoardToSavedEntry();
+    collabSyncAll();
     el.boardHint.hidden = false;
     el.boardHint.textContent = "환경판 정보가 수정되었습니다.";
   });
@@ -210,6 +232,7 @@
     if (!state.board) return;
     if (!window.confirm("현재 진행 중인 환경판을 삭제하시겠습니까? 저장하지 않은 배치 내용은 사라집니다.")) return;
     resetBoardToEmpty();
+    collabSyncAll();
   });
 
   function activateBoardUI() {
@@ -304,6 +327,7 @@
     el.boardHeightInput.value = saved.hCm;
     activateBoardUI();
     renderSavedBoardsList();
+    collabSyncAll();
   }
 
   function syncActiveBoardToSavedEntry() {
@@ -369,6 +393,7 @@
     state.placedItems.forEach(function (item) {
       el.board.appendChild(buildPlacedItemEl(item));
     });
+    attachCursorLayer();
 
     el.boardInfo.textContent = buildBoardInfoText(b);
   }
@@ -443,7 +468,7 @@
     state.addCascade++;
     var xCm = clamp(offset, 0, Math.max(b.wCm - wCm, 0));
     var yCm = clamp(b.hCm - hCm - offset, 0, Math.max(b.hCm - hCm, 0));
-    state.placedItems.push({
+    var newItem = {
       id: uid("item"),
       label: tpl.label,
       presetKey: tpl.isPreset ? tpl.key : null,
@@ -453,9 +478,12 @@
       xCm: xCm,
       yCm: yCm,
       color: tpl.color,
-      rotated: tpl.rotated
-    });
+      rotated: !!tpl.rotated,
+      order: nextOrder()
+    };
+    state.placedItems.push(newItem);
     renderBoard();
+    collabPushItem(newItem);
   }
 
   function buildTemplateCardEl(tpl, removable) {
@@ -497,6 +525,7 @@
       tpl.rotated = !tpl.rotated;
       renderCustomGallery();
       renderPresetGallery();
+      if (!tpl.isPreset) collabPushTemplates();
     });
     controls.appendChild(rotateBtn);
 
@@ -511,6 +540,7 @@
         e.stopPropagation();
         state.customTemplates = state.customTemplates.filter(function (t) { return t.id !== tpl.id; });
         renderCustomGallery();
+        collabPushTemplates();
       });
       controls.appendChild(removeBtn);
     }
@@ -580,6 +610,7 @@
       e.stopPropagation();
       state.placedItems = state.placedItems.filter(function (t) { return t.id !== item.id; });
       renderBoard();
+      collabRemoveItem(item.id);
     });
     toolbar.appendChild(removeBtn);
 
@@ -599,6 +630,7 @@
     item.xCm = clamp(centerXCm - item.wCm / 2, 0, Math.max(b.wCm - item.wCm, 0));
     item.yCm = clamp(centerYCm - item.hCm / 2, 0, Math.max(b.hCm - item.hCm, 0));
     renderBoard();
+    collabPushItem(item);
   }
 
   // ---------- Custom artwork generation ----------
@@ -616,12 +648,14 @@
       wCm: round1(w),
       hCm: round1(h),
       color: color,
-      rotated: false
+      rotated: false,
+      order: nextOrder()
     });
     el.customNameInput.value = "";
     el.customWidthInput.value = "";
     el.customHeightInput.value = "";
     renderCustomGallery();
+    collabPushTemplates();
   });
 
   // ---------- Save board as image ----------
@@ -629,7 +663,11 @@
   el.saveImageBtn.addEventListener("click", function () {
     if (!state.board || typeof window.html2canvas !== "function") return;
     var fileName = (state.board.name ? state.board.name : "환경판") + ".png";
-    window.html2canvas(el.board, { backgroundColor: "#fbfbfc", scale: 2 }).then(function (canvas) {
+    window.html2canvas(el.board, {
+      backgroundColor: "#fbfbfc",
+      scale: 2,
+      ignoreElements: function (node) { return node.classList && node.classList.contains("collab-cursor-layer"); }
+    }).then(function (canvas) {
       var link = document.createElement("a");
       link.download = fileName;
       link.href = canvas.toDataURL("image/png");
@@ -682,7 +720,7 @@
       var xCm = clamp(dropX / scale, 0, Math.max(state.board.wCm - wCm, 0));
       var yCm = clamp(dropY / scale, 0, Math.max(state.board.hCm - hCm, 0));
 
-      state.placedItems.push({
+      var droppedItem = {
         id: uid("item"),
         label: tpl.label,
         presetKey: tpl.isPreset ? tpl.key : null,
@@ -692,9 +730,12 @@
         xCm: xCm,
         yCm: yCm,
         color: tpl.color,
-        rotated: tpl.rotated
-      });
+        rotated: !!tpl.rotated,
+        order: nextOrder()
+      };
+      state.placedItems.push(droppedItem);
       renderBoard();
+      collabPushItem(droppedItem);
     }
 
     window.addEventListener("pointermove", onMove);
@@ -716,6 +757,7 @@
     var startXCm = item.xCm, startYCm = item.yCm;
 
     itemEl.setPointerCapture(e.pointerId);
+    collab.draggingId = item.id;
 
     function onMove(ev) {
       var dxCm = (ev.clientX - startClientX) / b.scale;
@@ -724,16 +766,24 @@
       item.yCm = clamp(startYCm + dyCm, 0, Math.max(b.hCm - item.hCm, 0));
       itemEl.style.left = (item.xCm * b.scale) + "px";
       itemEl.style.top = (item.yCm * b.scale) + "px";
+      collabPushItemThrottled(item);
     }
 
     function onUp(ev) {
       itemEl.removeEventListener("pointermove", onMove);
       itemEl.removeEventListener("pointerup", onUp);
+      itemEl.removeEventListener("pointercancel", onUp);
       try { itemEl.releasePointerCapture(ev.pointerId); } catch (err) {}
+      collab.draggingId = null;
+      if (collab.active && state.placedItems.indexOf(item) !== -1) {
+        collabPushItem(item);
+        renderBoard(); // pick up any remote changes that were only patched during the drag
+      }
     }
 
     itemEl.addEventListener("pointermove", onMove);
     itemEl.addEventListener("pointerup", onUp);
+    itemEl.addEventListener("pointercancel", onUp);
   }
 
   // ---------- Resize handling ----------
@@ -778,6 +828,603 @@
     }
   }
 
+  // ---------- Collaboration room (Firebase Realtime Database, rooms/{code}) ----------
+  // Room layout: meta, board {name,wCm,hCm,savedId}, items {id: placedItem},
+  // templates {id: customTemplate}, members {clientId: {name,color}}, cursors {clientId: {x,y}}.
+
+  var ROOM_CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  var NICKNAME_KEY = "hallway-sim-nickname";
+  var MEMBER_COLORS = ["#e2553d", "#2f9e6e", "#3d6ee0", "#d1487a", "#c98a3e", "#8a5cb5", "#2ba7a0", "#5a6b8c"];
+  var SEND_INTERVAL_MS = 70;
+
+  var collabEl = {
+    toggle: document.getElementById("collabToggle"),
+    infoBtn: document.getElementById("collabInfoBtn"),
+    infoText: document.getElementById("collabInfoText"),
+    panel: document.getElementById("collabPanel"),
+    panelCloseBtn: document.getElementById("collabPanelCloseBtn"),
+    codeText: document.getElementById("collabCodeText"),
+    copyLinkBtn: document.getElementById("collabCopyLinkBtn"),
+    copyCodeBtn: document.getElementById("collabCopyCodeBtn"),
+    memberCount: document.getElementById("collabMemberCount"),
+    members: document.getElementById("collabMembers"),
+    status: document.getElementById("collabStatus"),
+    modal: document.getElementById("collabModal"),
+    nameInput: document.getElementById("collabNameInput"),
+    codeInput: document.getElementById("collabCodeInput"),
+    tabs: Array.prototype.slice.call(document.querySelectorAll(".collab-tab")),
+    modes: Array.prototype.slice.call(document.querySelectorAll(".collab-mode")),
+    error: document.getElementById("collabError"),
+    cancelBtn: document.getElementById("collabCancelBtn"),
+    submitBtn: document.getElementById("collabSubmitBtn")
+  };
+
+  function cleanForDb(value) {
+    // Firebase rejects undefined values; a JSON round trip drops them.
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function nextOrder() { return Date.now() + Math.random(); }
+
+  function randomRoomCode() {
+    var code = "";
+    for (var i = 0; i < 6; i++) code += ROOM_CODE_CHARS.charAt(Math.floor(Math.random() * ROOM_CODE_CHARS.length));
+    return code;
+  }
+
+  function normalizeRoomCode(raw) {
+    return String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+  }
+
+  function memberColorFor(id) {
+    var h = 0;
+    for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return MEMBER_COLORS[h % MEMBER_COLORS.length];
+  }
+
+  function serializeBoard() {
+    if (!state.board) return null;
+    return { name: state.board.name || "", wCm: state.board.wCm, hCm: state.board.hCm, savedId: state.board.savedId || null };
+  }
+
+  function itemsToMap(items) {
+    var map = {};
+    items.forEach(function (item, i) {
+      if (item.order == null) item.order = i;
+      map[item.id] = cleanForDb(item);
+    });
+    return map;
+  }
+
+  function templatesToMap() {
+    return itemsToMap(state.customTemplates);
+  }
+
+  function roomChild(path) { return collab.roomRef.child(path); }
+
+  // Called after local edits that replace the whole board (new/edit/load/clear/delete).
+  function collabSyncAll() {
+    if (!collab.active) return;
+    // One multi-path update so others never see the new board with the old items.
+    collab.roomRef.update({
+      board: cleanForDb(serializeBoard()),
+      items: state.board ? itemsToMap(state.placedItems) : null
+    });
+  }
+
+  function collabSyncBoardMeta() {
+    if (!collab.active) return;
+    roomChild("board").set(cleanForDb(serializeBoard()));
+  }
+
+  function collabPushItem(item) {
+    if (!collab.active) return;
+    if (item.order == null) item.order = nextOrder();
+    roomChild("items/" + item.id).set(cleanForDb(item));
+  }
+
+  function collabRemoveItem(id) {
+    if (!collab.active) return;
+    roomChild("items/" + id).remove();
+  }
+
+  function collabPushTemplates() {
+    if (!collab.active) return;
+    roomChild("templates").set(templatesToMap());
+  }
+
+  // Throttled position updates while an item is being dragged.
+  var dragSendTimer = null;
+  function collabPushItemThrottled(item) {
+    if (!collab.active || dragSendTimer) return;
+    collabPushItem(item);
+    dragSendTimer = setTimeout(function () {
+      dragSendTimer = null;
+      if (collab.draggingId === item.id) collabPushItem(item);
+    }, SEND_INTERVAL_MS);
+  }
+
+  // ---------- Applying remote changes ----------
+
+  function normalizeItem(id, r) {
+    return {
+      id: id,
+      label: r.label || "",
+      presetKey: r.presetKey || null,
+      isPreset: !!r.isPreset,
+      wCm: Number(r.wCm) || 1,
+      hCm: Number(r.hCm) || 1,
+      xCm: Number(r.xCm) || 0,
+      yCm: Number(r.yCm) || 0,
+      color: r.color || "#8b93a3",
+      rotated: !!r.rotated,
+      order: Number(r.order) || 0
+    };
+  }
+
+  function applyRemoteBoard(val) {
+    if (!val || !(val.wCm > 0) || !(val.hCm > 0)) {
+      if (state.board) resetBoardToEmpty();
+      return;
+    }
+    var wasEmpty = !state.board;
+    if (wasEmpty) state.board = { scale: 1, pxW: 0, pxH: 0 };
+    state.board.name = val.name || "";
+    state.board.wCm = Number(val.wCm);
+    state.board.hCm = Number(val.hCm);
+    state.board.savedId = val.savedId || null;
+    el.boardNameInput.value = state.board.name;
+    el.boardWidthInput.value = state.board.wCm;
+    el.boardHeightInput.value = state.board.hCm;
+    if (wasEmpty) {
+      activateBoardUI();
+    } else {
+      updateBoardTitle();
+      renderAll();
+    }
+    renderSavedBoardsList();
+  }
+
+  function applyRemoteItems(val) {
+    var map = val || {};
+    var localById = {};
+    state.placedItems.forEach(function (item) { localById[item.id] = item; });
+    var next = Object.keys(map).map(function (id) {
+      var remote = normalizeItem(id, map[id] || {});
+      var local = localById[id];
+      if (!local) return remote;
+      if (collab.draggingId === id) {
+        remote.xCm = local.xCm;
+        remote.yCm = local.yCm;
+      }
+      // Mutate in place: placed-item DOM handlers close over these objects.
+      Object.keys(remote).forEach(function (k) { local[k] = remote[k]; });
+      return local;
+    });
+    next.sort(function (a, b) { return (a.order || 0) - (b.order || 0); });
+    state.placedItems = next;
+    if (!state.board) return;
+    if (collab.draggingId) patchBoardItems();
+    else renderBoard();
+  }
+
+  // Updates item positions without rebuilding the item being dragged (rebuilding
+  // it would break the local pointer capture).
+  function patchBoardItems() {
+    var scale = state.board.scale;
+    var existing = {};
+    el.board.querySelectorAll(".placed-item").forEach(function (d) { existing[d.dataset.itemId] = d; });
+    state.placedItems.forEach(function (item) {
+      var d = existing[item.id];
+      if (d) {
+        delete existing[item.id];
+        if (item.id === collab.draggingId) return;
+        d.style.left = (item.xCm * scale) + "px";
+        d.style.top = (item.yCm * scale) + "px";
+        d.style.width = (item.wCm * scale) + "px";
+        d.style.height = (item.hCm * scale) + "px";
+      } else {
+        el.board.insertBefore(buildPlacedItemEl(item), collab.cursorLayer.parentNode === el.board ? collab.cursorLayer : null);
+      }
+    });
+    Object.keys(existing).forEach(function (id) { existing[id].remove(); });
+    el.boardInfo.textContent = buildBoardInfoText(state.board);
+  }
+
+  function applyRemoteTemplates(val) {
+    var map = val || {};
+    state.customTemplates = Object.keys(map).map(function (id) {
+      var r = map[id] || {};
+      return {
+        id: id,
+        label: r.label || "커스텀",
+        wCm: Number(r.wCm) || 1,
+        hCm: Number(r.hCm) || 1,
+        color: r.color || CUSTOM_COLORS[0],
+        rotated: !!r.rotated,
+        order: Number(r.order) || 0
+      };
+    }).sort(function (a, b) { return a.order - b.order; });
+    renderCustomGallery();
+  }
+
+  // ---------- Cursors ----------
+
+  var CURSOR_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 1 L1 13 L4.5 9.8 L7 15 L9.2 14 L6.8 8.9 L11.5 8.9 Z" fill="currentColor" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+
+  function renderCursors() {
+    var layer = collab.cursorLayer;
+    layer.innerHTML = "";
+    if (!collab.active || !state.board) return;
+    var scale = state.board.scale;
+    Object.keys(collab.cursors).forEach(function (cid) {
+      if (cid === collab.clientId) return;
+      var c = collab.cursors[cid];
+      var m = collab.members[cid];
+      if (!c || !m) return;
+      var color = m.color || memberColorFor(cid);
+      var div = document.createElement("div");
+      div.className = "collab-cursor";
+      div.style.left = (Number(c.x) * scale) + "px";
+      div.style.top = (Number(c.y) * scale) + "px";
+      div.style.color = color;
+      div.innerHTML = CURSOR_SVG;
+      var tag = document.createElement("span");
+      tag.className = "collab-cursor-name";
+      tag.style.background = color;
+      tag.textContent = m.name || "참여자";
+      div.appendChild(tag);
+      layer.appendChild(div);
+    });
+  }
+
+  function attachCursorLayer() {
+    if (collab.active && state.board) {
+      el.board.appendChild(collab.cursorLayer);
+      renderCursors();
+    }
+  }
+
+  var cursorTimer = null;
+  var pendingCursor;
+  var lastSentCursor = null;
+
+  function sendCursor(pos) {
+    pendingCursor = pos;
+    if (cursorTimer) return;
+    flushCursor();
+    cursorTimer = setTimeout(function () {
+      cursorTimer = null;
+      if (pendingCursor !== lastSentCursor) flushCursor();
+    }, SEND_INTERVAL_MS);
+  }
+
+  function flushCursor() {
+    if (!collab.active) return;
+    lastSentCursor = pendingCursor;
+    roomChild("cursors/" + collab.clientId).set(pendingCursor);
+  }
+
+  window.addEventListener("pointermove", function (e) {
+    if (!collab.active || !state.board) return;
+    var rect = el.board.getBoundingClientRect();
+    var inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+    if (inside) {
+      var s = state.board.scale;
+      sendCursor({ x: round1((e.clientX - rect.left) / s), y: round1((e.clientY - rect.top) / s) });
+    } else if (lastSentCursor !== null || pendingCursor !== null) {
+      sendCursor(null);
+    }
+  });
+
+  // ---------- Room panel UI ----------
+
+  function renderMembers() {
+    var ids = Object.keys(collab.members).sort(function (a, b) {
+      return (collab.members[a].joinedAt || 0) - (collab.members[b].joinedAt || 0);
+    });
+    collabEl.members.innerHTML = "";
+    ids.forEach(function (id) {
+      var m = collab.members[id] || {};
+      var li = document.createElement("li");
+      var dot = document.createElement("span");
+      dot.className = "collab-member-dot";
+      dot.style.background = m.color || memberColorFor(id);
+      li.appendChild(dot);
+      li.appendChild(document.createTextNode(m.name || "참여자"));
+      if (id === collab.clientId) {
+        var me = document.createElement("span");
+        me.className = "collab-member-me";
+        me.textContent = "(나)";
+        li.appendChild(me);
+      }
+      collabEl.members.appendChild(li);
+    });
+    collabEl.memberCount.textContent = ids.length + "명";
+    collabEl.infoText.textContent = collab.code + " · " + ids.length + "명";
+  }
+
+  function setPanelOpen(open) {
+    collabEl.panel.hidden = !open;
+    collabEl.infoBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function renderCollabUI() {
+    collabEl.toggle.setAttribute("aria-checked", collab.active ? "true" : "false");
+    collabEl.infoBtn.hidden = !collab.active;
+    if (!collab.active) {
+      setPanelOpen(false);
+      return;
+    }
+    collabEl.codeText.textContent = collab.code;
+    renderMembers();
+  }
+
+  var statusTimer = null;
+  function showCollabStatus(msg) {
+    collabEl.status.textContent = msg;
+    if (statusTimer) clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () { collabEl.status.textContent = ""; }, 2500);
+  }
+
+  function inviteLink() {
+    var url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("room", collab.code);
+    return url.toString();
+  }
+
+  function copyText(text, okMsg) {
+    function fallback() {
+      window.prompt("아래 내용을 복사해주세요.", text);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { showCollabStatus(okMsg); }, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function setUrlRoom(code) {
+    try {
+      var url = new URL(window.location.href);
+      if (code) url.searchParams.set("room", code);
+      else url.searchParams.delete("room");
+      window.history.replaceState(null, "", url.toString());
+    } catch (err) {}
+  }
+
+  // ---------- Join / create / leave ----------
+
+  function describeDbError(err) {
+    var msg = err && (err.code || err.message) ? String(err.code || err.message) : "";
+    if (/permission/i.test(msg)) {
+      return "Firebase 데이터베이스 규칙이 협업 방(rooms) 저장을 허용하지 않습니다. Firebase 콘솔의 Realtime Database 규칙에 rooms 경로 읽기/쓰기 권한을 추가해주세요.";
+    }
+    return "연결하지 못했습니다. 인터넷 연결을 확인하고 다시 시도해주세요.";
+  }
+
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () { reject(new Error("timeout")); }, ms);
+      promise.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
+    });
+  }
+
+  function createRoom(attempt) {
+    var db = firebase.database();
+    var code = randomRoomCode();
+    var ref = db.ref("rooms/" + code);
+    return withTimeout(ref.child("meta").once("value"), 10000).then(function (snap) {
+      if (snap.exists()) {
+        if ((attempt || 0) > 4) throw new Error("no free room code");
+        return createRoom((attempt || 0) + 1);
+      }
+      var data = {
+        meta: { createdAt: Date.now() },
+        board: serializeBoard(),
+        items: state.board ? itemsToMap(state.placedItems) : null,
+        templates: templatesToMap()
+      };
+      return withTimeout(ref.set(cleanForDb(data)), 10000).then(function () { return code; });
+    });
+  }
+
+  function checkRoomExists(code) {
+    var ref = firebase.database().ref("rooms/" + code + "/meta");
+    return withTimeout(ref.once("value"), 10000).then(function (snap) { return snap.exists(); });
+  }
+
+  function enterRoom(code, name) {
+    var db = firebase.database();
+    collab.active = true;
+    collab.code = code;
+    collab.name = name;
+    collab.color = memberColorFor(collab.clientId);
+    collab.members = {};
+    collab.cursors = {};
+    collab.roomRef = db.ref("rooms/" + code);
+
+    var memberRef = roomChild("members/" + collab.clientId);
+    memberRef.onDisconnect().remove();
+    roomChild("cursors/" + collab.clientId).onDisconnect().remove();
+    memberRef.set({ name: name, color: collab.color, joinedAt: Date.now() });
+
+    roomChild("board").on("value", function (snap) { applyRemoteBoard(snap.val()); });
+    roomChild("items").on("value", function (snap) { applyRemoteItems(snap.val()); });
+    roomChild("templates").on("value", function (snap) { applyRemoteTemplates(snap.val()); });
+    roomChild("members").on("value", function (snap) {
+      collab.members = snap.val() || {};
+      // Re-announce ourselves if our entry was dropped (e.g. after a reconnect).
+      if (collab.active && !collab.members[collab.clientId]) {
+        memberRef.set({ name: name, color: collab.color, joinedAt: Date.now() });
+        memberRef.onDisconnect().remove();
+      }
+      renderMembers();
+      renderCursors();
+    });
+    roomChild("cursors").on("value", function (snap) {
+      collab.cursors = snap.val() || {};
+      renderCursors();
+    });
+
+    setUrlRoom(code);
+    renderCollabUI();
+    setPanelOpen(true);
+    attachCursorLayer();
+  }
+
+  function leaveRoom() {
+    if (!collab.active) return;
+    ["board", "items", "templates", "members", "cursors"].forEach(function (k) { roomChild(k).off(); });
+    roomChild("members/" + collab.clientId).remove();
+    roomChild("cursors/" + collab.clientId).remove();
+    roomChild("members/" + collab.clientId).onDisconnect().cancel();
+    roomChild("cursors/" + collab.clientId).onDisconnect().cancel();
+    collab.active = false;
+    collab.code = null;
+    collab.roomRef = null;
+    collab.members = {};
+    collab.cursors = {};
+    collab.draggingId = null;
+    lastSentCursor = null;
+    pendingCursor = undefined;
+    collab.cursorLayer.innerHTML = "";
+    if (collab.cursorLayer.parentNode) collab.cursorLayer.parentNode.removeChild(collab.cursorLayer);
+    setUrlRoom(null);
+    renderCollabUI();
+  }
+
+  // ---------- Modal ----------
+
+  var modalMode = "create";
+
+  function setModalMode(mode) {
+    modalMode = mode;
+    collabEl.tabs.forEach(function (t) {
+      var on = t.dataset.mode === mode;
+      t.classList.toggle("is-active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    collabEl.modes.forEach(function (m) { m.hidden = m.dataset.mode !== mode; });
+    collabEl.submitBtn.textContent = mode === "create" ? "방 만들기" : "참여하기";
+    showModalError("");
+  }
+
+  function showModalError(msg) {
+    collabEl.error.textContent = msg;
+    collabEl.error.hidden = !msg;
+  }
+
+  function openCollabModal(mode, code) {
+    var saved = "";
+    try { saved = window.localStorage.getItem(NICKNAME_KEY) || ""; } catch (err) {}
+    collabEl.nameInput.value = saved;
+    collabEl.codeInput.value = code || "";
+    setModalMode(mode);
+    setModalBusy(false);
+    collabEl.modal.hidden = false;
+    collabEl.toggle.setAttribute("aria-checked", "true");
+    (collabEl.nameInput.value ? (mode === "join" && !code ? collabEl.codeInput : collabEl.submitBtn) : collabEl.nameInput).focus();
+  }
+
+  function closeCollabModal() {
+    collabEl.modal.hidden = true;
+    renderCollabUI();
+  }
+
+  function setModalBusy(busy) {
+    collabEl.submitBtn.disabled = busy;
+    collabEl.cancelBtn.disabled = busy;
+    collabEl.submitBtn.textContent = busy ? "연결 중…" : (modalMode === "create" ? "방 만들기" : "참여하기");
+  }
+
+  function submitCollabModal() {
+    var name = collabEl.nameInput.value.trim();
+    if (!name) {
+      showModalError("이름을 입력해주세요.");
+      collabEl.nameInput.focus();
+      return;
+    }
+    try { window.localStorage.setItem(NICKNAME_KEY, name); } catch (err) {}
+
+    if (modalMode === "join") {
+      var code = normalizeRoomCode(collabEl.codeInput.value);
+      collabEl.codeInput.value = code;
+      if (code.length !== 6) {
+        showModalError("6자리 방 코드를 입력해주세요.");
+        collabEl.codeInput.focus();
+        return;
+      }
+      setModalBusy(true);
+      checkRoomExists(code).then(function (exists) {
+        if (!exists) {
+          setModalBusy(false);
+          showModalError("‘" + code + "’ 방을 찾을 수 없습니다. 방 코드를 다시 확인해주세요.");
+          return;
+        }
+        collabEl.modal.hidden = true;
+        enterRoom(code, name);
+        showCollabStatus("협업 방에 참여했습니다.");
+      }, function (err) {
+        setModalBusy(false);
+        showModalError(describeDbError(err));
+      });
+      return;
+    }
+
+    setModalBusy(true);
+    createRoom(0).then(function (code) {
+      collabEl.modal.hidden = true;
+      enterRoom(code, name);
+      showCollabStatus("협업 방을 만들었습니다. 초대 링크를 공유해주세요.");
+    }, function (err) {
+      setModalBusy(false);
+      showModalError(describeDbError(err));
+    });
+  }
+
+  collabEl.toggle.addEventListener("click", function () {
+    if (collab.active) {
+      if (!window.confirm("협업 방에서 나갈까요? 지금 환경판은 이 화면에 그대로 남습니다.")) return;
+      leaveRoom();
+      return;
+    }
+    if (!FIREBASE_ENABLED) {
+      window.alert("협업 기능을 쓰려면 인터넷 연결(Firebase)이 필요합니다.");
+      return;
+    }
+    openCollabModal("create");
+  });
+
+  collabEl.infoBtn.addEventListener("click", function () { setPanelOpen(collabEl.panel.hidden); });
+  collabEl.panelCloseBtn.addEventListener("click", function () { setPanelOpen(false); });
+  collabEl.copyLinkBtn.addEventListener("click", function () { copyText(inviteLink(), "초대 링크를 복사했습니다."); });
+  collabEl.copyCodeBtn.addEventListener("click", function () { copyText(collab.code, "방 코드를 복사했습니다."); });
+  collabEl.tabs.forEach(function (t) {
+    t.addEventListener("click", function () { setModalMode(t.dataset.mode); });
+  });
+  collabEl.cancelBtn.addEventListener("click", closeCollabModal);
+  collabEl.submitBtn.addEventListener("click", submitCollabModal);
+  collabEl.modal.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !collabEl.cancelBtn.disabled) closeCollabModal();
+    if (e.key === "Enter" && e.target.tagName === "INPUT") submitCollabModal();
+  });
+  collabEl.modal.addEventListener("click", function (e) {
+    if (e.target === collabEl.modal && !collabEl.cancelBtn.disabled) closeCollabModal();
+  });
+  collabEl.codeInput.addEventListener("input", function () {
+    var v = normalizeRoomCode(collabEl.codeInput.value);
+    if (v !== collabEl.codeInput.value) collabEl.codeInput.value = v;
+  });
+
+  function openRoomFromUrl() {
+    var code = "";
+    try { code = normalizeRoomCode(new URL(window.location.href).searchParams.get("room")); } catch (err) {}
+    if (code.length === 6 && FIREBASE_ENABLED) openCollabModal("join", code);
+  }
+
   // ---------- Init ----------
 
   (function migrateLocalSavedBoardsOnLoad() {
@@ -790,4 +1437,5 @@
 
   renderSavedBoardsList();
   initCloudSync();
+  openRoomFromUrl();
 })();

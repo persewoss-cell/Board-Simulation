@@ -83,6 +83,62 @@
   <footer class="app-footer">만든이: 강형권 선생님</footer>
 </div>
 
+<div class="collab-dock" id="collabDock">
+  <div class="collab-bar">
+    <button type="button" class="collab-info-btn" id="collabInfoBtn" hidden aria-expanded="false" aria-controls="collabPanel">
+      <span class="collab-live-dot" aria-hidden="true"></span><span id="collabInfoText">방</span>
+    </button>
+    <button type="button" class="collab-toggle" id="collabToggle" role="switch" aria-checked="false" title="협업 방 켜기/끄기">
+      <span class="collab-toggle-label">협업</span>
+      <span class="collab-switch" aria-hidden="true"><span class="collab-knob"></span></span>
+    </button>
+  </div>
+  <div class="collab-panel" id="collabPanel" hidden>
+    <div class="collab-panel-head">
+      <span>협업 방</span>
+      <button type="button" class="collab-close-btn" id="collabPanelCloseBtn" title="접기" aria-label="접기">×</button>
+    </div>
+    <div class="collab-code-box">
+      <span class="collab-code-label">방 코드</span>
+      <strong class="collab-code" id="collabCodeText"></strong>
+    </div>
+    <div class="collab-panel-actions">
+      <button type="button" id="collabCopyLinkBtn" class="collab-btn collab-btn-primary">초대 링크 복사</button>
+      <button type="button" id="collabCopyCodeBtn" class="collab-btn">코드 복사</button>
+    </div>
+    <div class="collab-members-title">참여자 <span id="collabMemberCount"></span></div>
+    <ul class="collab-members" id="collabMembers"></ul>
+    <p class="collab-status" id="collabStatus" aria-live="polite"></p>
+  </div>
+</div>
+
+<div class="collab-modal-backdrop" id="collabModal" hidden>
+  <div class="collab-modal" role="dialog" aria-modal="true" aria-labelledby="collabModalTitle">
+    <h3 id="collabModalTitle">협업 시작하기</h3>
+    <label class="collab-field">내 이름
+      <input type="text" id="collabNameInput" maxlength="12" placeholder="예: 김선생" autocomplete="nickname">
+    </label>
+    <div class="collab-tabs" role="tablist">
+      <button type="button" class="collab-tab is-active" role="tab" data-mode="create">새 방 만들기</button>
+      <button type="button" class="collab-tab" role="tab" data-mode="join">방 코드로 참여</button>
+    </div>
+    <div class="collab-mode" data-mode="create">
+      <p class="collab-help">지금 보고 있는 환경판으로 새 협업 방을 만듭니다. 만든 뒤 초대 링크나 방 코드를 함께할 사람에게 보내주세요.</p>
+    </div>
+    <div class="collab-mode" data-mode="join" hidden>
+      <label class="collab-field">방 코드
+        <input type="text" id="collabCodeInput" maxlength="6" placeholder="예: K7P2QX" autocomplete="off" spellcheck="false">
+      </label>
+      <p class="collab-help">참여하면 지금 화면의 환경판이 협업 방의 환경판으로 바뀝니다.</p>
+    </div>
+    <p class="collab-error" id="collabError" hidden></p>
+    <div class="collab-modal-actions">
+      <button type="button" class="collab-btn" id="collabCancelBtn">취소</button>
+      <button type="button" class="collab-btn collab-btn-primary" id="collabSubmitBtn">방 만들기</button>
+    </div>
+  </div>
+</div>
+
 <div class="drag-ghost" id="dragGhost" hidden></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
